@@ -1,0 +1,139 @@
+# Market Manipulation Detection Toolkit - Configuration
+# ======================================================
+
+# Data Settings
+# --------------
+data:
+  # Directory for raw tick data and intermediate results
+  data_dir: "./data"
+  
+  # Expected tick data format
+  tick_format: "csv"  # Options: csv, parquet
+  
+  # Column names in tick data
+  columns:
+    timestamp: "timestamp"
+    price: "price"
+    volume: "volume"
+    side: "side"  # Optional: buy/sell indicator
+
+# Bar Aggregation Settings
+# -------------------------
+bars:
+  # Default timeframe for bar aggregation
+  timeframe: "1min"  # Options: 1min, 5min, 15min, 1h, etc.
+  
+  # Features to compute during aggregation
+  compute_vwap: true
+  compute_trade_count: true
+  
+  # Rolling window features
+  rolling_volatility_window: 20  # bars
+  rolling_volume_window: 20      # bars
+
+# Baseline Market Simulation Settings
+# ------------------------------------
+simulation:
+  # Number of simulation days
+  n_days: 500
+  
+  # Random seed for reproducibility
+  seed: 42
+  
+  # Market A: Unlimited Wealth (Gaussian Random Walk)
+  unlimited_wealth:
+    n_traders: 1000
+    price_sigma: 0.02  # Standard deviation of price distribution
+    initial_price: 100.0
+  
+  # Market B: Limited Wealth (Gravity Model)
+  limited_wealth:
+    n_traders: 1000
+    initial_price: 100.0
+    initial_wealth_mean: 10000.0
+    initial_wealth_std: 2000.0
+    initial_asset_mean: 50.0
+    initial_asset_std: 10.0
+    wealth_limit_factor: 0.8  # Fraction of wealth available for trading
+
+# Anomaly Detection Settings
+# ---------------------------
+anomaly:
+  # Price-Volume Anomaly Detection
+  price_volume:
+    window: 100  # Historical window for model fitting
+    z_threshold: 2.5  # Z-score threshold for anomaly
+    features:
+      - "volume"
+      - "rolling_vol"
+      - "hour_of_day"
+  
+  # Volume Spike Detection
+  volume_spike:
+    lookback_days: 30  # Days of history for baseline
+    z_threshold: 3.0   # Z-score threshold
+    group_by_time: true  # Group by time-of-day for seasonality
+  
+  # Structural Anomaly Detection
+  structure:
+    # Wash trading proxy
+    wash_trade_window: 20  # bars
+    wash_index_threshold: 5.0  # gross_vol / net_vol ratio
+    
+    # Extreme candlestick patterns
+    wick_ratio_threshold: 3.0  # (upper_wick + lower_wick) / body
+    volume_percentile_threshold: 0.95  # Volume must be in top 5%
+    
+    # Mirror trade detection (placeholder for future tick-level analysis)
+    mirror_trade_time_window: 5  # seconds
+
+# Manipulation Score Settings
+# ----------------------------
+manipulation_score:
+  # Weights for different anomaly components (must sum to 1.0)
+  weights:
+    price_volume: 0.25
+    volume_spike: 0.25
+    structure: 0.25
+    wash_trade: 0.25
+  
+  # Score normalization
+  normalize: true
+  normalization_method: "minmax"  # Options: minmax, zscore, sigmoid
+  
+  # Smoothing
+  smooth: true
+  smoothing_window: 5  # bars
+
+# Backtesting Settings
+# ---------------------
+backtest:
+  # Manipulation score filter
+  filter_threshold: 0.7  # Signals with score > threshold are filtered
+  filter_mode: "zero"    # Options: zero (set to 0), reduce (scale down)
+  reduce_factor: 0.5     # If filter_mode=reduce, multiply signal by this
+  
+  # Performance metrics
+  metrics:
+    - "total_return"
+    - "sharpe_ratio"
+    - "max_drawdown"
+    - "win_rate"
+  
+  # Transaction costs
+  commission: 0.0002  # 0.02% per trade
+  slippage: 0.0001    # 0.01% slippage
+
+# Logging Settings
+# ----------------
+logging:
+  level: "INFO"  # Options: DEBUG, INFO, WARNING, ERROR
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+# Paths (auto-managed by utils/paths.py)
+# ---------------------------------------
+# These are typically not edited manually
+paths:
+  project_root: "."
+  config_file: "src/config/config.yaml"
+
