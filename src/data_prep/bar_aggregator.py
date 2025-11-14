@@ -37,6 +37,13 @@ def ticks_to_bars(
         - vwap: Volume-weighted average price (if compute_features=True)
         - rolling_vol: Rolling volatility (if compute_features=True)
         - rolling_volume: Rolling average volume (if compute_features=True)
+        - gross_volume: Total volume (for wash trading detection)
+        - net_volume: Net volume weighted by price direction
+        - body: Candlestick body size
+        - upper_wick: Upper shadow length
+        - lower_wick: Lower shadow length
+        - wick_ratio: Ratio of wicks to body (for extreme candle detection)
+        - wash_index: Wash trading index (gross_volume / net_volume)
         
     Examples:
         >>> ticks = pd.DataFrame({
@@ -91,24 +98,56 @@ def ticks_to_bars(
         # VWAP: volume-weighted average price
         df['value'] = df['price'] * df['volume']
         bars['vwap'] = df['value'].resample(freq).sum() / bars['volume']
-        
+
         # Load config for rolling window parameters
         config = load_config()
         vol_window = config.get('bars', {}).get('rolling_volatility_window', 20)
         volume_window = config.get('bars', {}).get('rolling_volume_window', 20)
-        
+
         # Compute returns
         bars['returns'] = bars['close'].pct_change()
-        
+
         # Rolling volatility (annualized, assuming 252 trading days)
         bars['rolling_vol'] = bars['returns'].rolling(window=vol_window).std()
-        
+
         # Rolling average volume
         bars['rolling_volume'] = bars['volume'].rolling(window=volume_window).mean()
-        
+
         # Fill NaN in rolling features with forward fill
         bars['rolling_vol'] = bars['rolling_vol'].fillna(method='bfill')
         bars['rolling_volume'] = bars['rolling_volume'].fillna(method='bfill')
+
+        # === 添加缺失的特征 ===
+
+        # 1. Gross volume and net volume (用于对敲检测)
+        # Gross volume: 总成交量
+        bars['gross_volume'] = bars['volume']
+
+        # Net volume: 净成交量 (根据价格方向加权)
+        # 如果收盘价 > 开盘价，视为买入压力；反之为卖出压力
+        price_direction = np.sign(bars['close'] - bars['open'])
+        bars['net_volume'] = bars['volume'] * price_direction
+
+        # 2. Candlestick features (用于极端K线检测)
+        # Body: K线实体大小
+        bars['body'] = np.abs(bars['close'] - bars['open'])
+
+        # Upper wick: 上影线长度
+        bars['upper_wick'] = bars['high'] - bars[['open', 'close']].max(axis=1)
+
+        # Lower wick: 下影线长度
+        bars['lower_wick'] = bars[['open', 'close']].min(axis=1) - bars['low']
+
+        # Wick ratio: 影线与实体的比率 (用于检测极端K线)
+        # 比率越高，说明影线越长，可能是操纵信号
+        bars['wick_ratio'] = (bars['upper_wick'] + bars['lower_wick']) / (bars['body'] + 1e-8)
+
+        # 3. Wash trading index (对敲指数)
+        # 简化版本：gross_volume / abs(net_volume)
+        # 如果成交量很大但价格变化很小，可能是对敲
+        bars['wash_index'] = bars['gross_volume'] / (np.abs(bars['net_volume']) + 1e-8)
+
+        logger.info(f"Added manipulation detection features: gross_volume, net_volume, body, wick_ratio, wash_index")
     
     logger.info(f"Created {len(bars):,} bars from {bars.index.min()} to {bars.index.max()}")
     
