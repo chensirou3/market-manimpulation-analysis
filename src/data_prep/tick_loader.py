@@ -137,8 +137,9 @@ def _load_partitioned_data(
     """
     Load data from date-partitioned parquet files.
 
-    Expected structure:
-        data/YYYY/MM/tick/dt=YYYY-MM-DD_part-*.parquet
+    Supports two structures:
+        1. data/YYYY/MM/tick/dt=YYYY-MM-DD_part-*.parquet (original)
+        2. data/symbol=XAUUSD/date=YYYY-MM-DD/*.parquet (new)
     """
     if start_date is None:
         raise ValueError("start_date is required for partitioned data loading")
@@ -152,23 +153,40 @@ def _load_partitioned_data(
     dfs = []
     files_loaded = 0
 
+    # Check which structure exists
+    symbol_dir = data_dir / "symbol=XAUUSD"
+    use_symbol_structure = symbol_dir.exists()
+
     for date in date_range:
-        # Construct path: data/YYYY/MM/tick/
-        year = date.strftime('%Y')
-        month = date.strftime('%m')
-        tick_dir = data_dir / year / month / 'tick'
-
-        if not tick_dir.exists():
-            logger.debug(f"Directory not found: {tick_dir}")
-            continue
-
-        # Find files for this date
         date_str = date.strftime('%Y-%m-%d')
-        pattern = file_pattern or f"dt={date_str}_part-*.parquet"
-        files = list(tick_dir.glob(pattern))
+
+        if use_symbol_structure:
+            # New structure: data/symbol=XAUUSD/date=YYYY-MM-DD/
+            date_dir = symbol_dir / f"date={date_str}"
+
+            if not date_dir.exists():
+                logger.debug(f"Directory not found: {date_dir}")
+                continue
+
+            # Find all parquet files in this date directory
+            pattern = file_pattern or "*.parquet"
+            files = list(date_dir.glob(pattern))
+        else:
+            # Original structure: data/YYYY/MM/tick/
+            year = date.strftime('%Y')
+            month = date.strftime('%m')
+            tick_dir = data_dir / year / month / 'tick'
+
+            if not tick_dir.exists():
+                logger.debug(f"Directory not found: {tick_dir}")
+                continue
+
+            # Find files for this date
+            pattern = file_pattern or f"dt={date_str}_part-*.parquet"
+            files = list(tick_dir.glob(pattern))
 
         if not files:
-            logger.debug(f"No files found for {date_str} in {tick_dir}")
+            logger.debug(f"No files found for {date_str}")
             continue
 
         # Load all parts for this date
@@ -206,9 +224,14 @@ def _adapt_columns(df: pd.DataFrame) -> pd.DataFrame:
 
     # 1. Handle timestamp
     if 'timestamp' not in df.columns:
-        if 'ts_utc' in df.columns:
+        if 'ts' in df.columns:
+            # Handle 'ts' column (already datetime)
+            df['timestamp'] = pd.to_datetime(df['ts'])
+            logger.debug("Converted 'ts' to 'timestamp'")
+        elif 'ts_utc' in df.columns:
             # Convert milliseconds to datetime
             df['timestamp'] = pd.to_datetime(df['ts_utc'], unit='ms', utc=True)
+            logger.debug("Converted 'ts_utc' to 'timestamp'")
         elif 'time' in df.columns:
             df['timestamp'] = pd.to_datetime(df['time'])
         elif 'datetime' in df.columns:
