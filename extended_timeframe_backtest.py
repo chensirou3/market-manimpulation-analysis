@@ -146,34 +146,49 @@ def generate_asymmetric_signals(bars, config):
 
 
 def run_pure_backtest(bars, config):
-    """Run backtest without SL/TP"""
+    """
+    ⚠️ DEPRECATED - 此函数包含前视偏差，不应使用！
+
+    问题: 使用forward_return = bars['returns'].shift(-1)，这会导致前视偏差
+
+    请使用 src/strategies/backtest_reversal.py 中的 run_extreme_reversal_backtest() 代替
+
+    此函数保留仅用于向后兼容，但结果不可信。
+    """
+    raise DeprecationWarning(
+        "run_pure_backtest() 包含前视偏差，已弃用。\n"
+        "请使用 src/strategies/backtest_reversal.py 中的 run_extreme_reversal_backtest() 代替。\n"
+        "详见: LOOK_AHEAD_BIAS_AUDIT_REPORT.md"
+    )
+
+    # 以下代码包含前视偏差，不应执行
     # Compute forward returns
     bars['forward_return'] = bars['returns'].shift(-1).rolling(config.holding_horizon).sum().shift(-config.holding_horizon+1)
-    
+
     # Compute strategy returns
     bars['strategy_return'] = bars['exec_signal'] * bars['forward_return']
-    
+
     # Filter to trades
     trades = bars[bars['exec_signal'] != 0].copy()
-    
+
     if len(trades) == 0:
         return None
-    
+
     # Compute stats
     n_trades = len(trades)
     total_return = trades['strategy_return'].sum()
     avg_return = trades['strategy_return'].mean()
     std_return = trades['strategy_return'].std()
-    
+
     winners = trades[trades['strategy_return'] > 0]
     losers = trades[trades['strategy_return'] < 0]
-    
+
     win_rate = len(winners) / n_trades if n_trades > 0 else 0
     avg_winner = winners['strategy_return'].mean() if len(winners) > 0 else 0
     avg_loser = losers['strategy_return'].mean() if len(losers) > 0 else 0
-    
+
     sharpe = (avg_return / std_return) * np.sqrt(n_trades) if std_return > 0 else 0
-    
+
     return {
         'n_trades': n_trades,
         'total_return': total_return,
