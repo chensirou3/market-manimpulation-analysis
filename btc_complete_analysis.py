@@ -21,9 +21,9 @@ print()
 print("Step 1: Loading BTC tick data...")
 print("-" * 80)
 
-# Use a subset of data for initial testing (2024 only, ~1 year)
-start_date = '2024-01-01'
-end_date = '2024-12-31'
+# Use all available data (2017-2025, ~8.5 years)
+start_date = '2017-01-01'
+end_date = '2025-12-31'
 
 print(f"Date range: {start_date} to {end_date}")
 print("Loading tick data (this may take a while)...")
