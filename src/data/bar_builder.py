@@ -136,19 +136,19 @@ def _build_bars_from_ticks(
     # Resample to bars
     agg_rules = {
         'mid': ['first', 'max', 'min', 'last'],
-        'bid': ['first', 'last'],
-        'ask': ['first', 'last'],
+        'bid': ['first', 'max', 'min', 'last'],
+        'ask': ['first', 'max', 'min', 'last'],
         'spread': 'mean',
     }
-    
+
     if 'volume' in ticks.columns:
         agg_rules['volume'] = 'sum'
-    
+
     bars = ticks.resample(bar_size).agg(agg_rules)
-    
+
     # Flatten column names
     bars.columns = ['_'.join(col).strip('_') for col in bars.columns.values]
-    
+
     # Rename to standard OHLC
     bars = bars.rename(columns={
         'mid_first': 'mid_open',
@@ -157,11 +157,15 @@ def _build_bars_from_ticks(
         'mid_last': 'mid_close',
         'spread_mean': 'spread_mean',
     })
-    
+
     # Also keep bid/ask OHLC
     bars['bid_open'] = bars.get('bid_first', np.nan)
+    bars['bid_high'] = bars.get('bid_max', np.nan)
+    bars['bid_low'] = bars.get('bid_min', np.nan)
     bars['bid_close'] = bars.get('bid_last', np.nan)
     bars['ask_open'] = bars.get('ask_first', np.nan)
+    bars['ask_high'] = bars.get('ask_max', np.nan)
+    bars['ask_low'] = bars.get('ask_min', np.nan)
     bars['ask_close'] = bars.get('ask_last', np.nan)
     
     # Use mid as main OHLC
