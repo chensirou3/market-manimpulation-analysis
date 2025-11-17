@@ -268,3 +268,45 @@ def summarize_exit_rule_results(trades_df: pd.DataFrame) -> Dict:
         'exit_RAW_END': exit_reason_counts.get('RAW_END', 0),
     }
 
+
+def apply_dynamic_exit_rules_to_all_trades(
+    trade_paths: pd.DataFrame,
+    symbol: str
+) -> pd.DataFrame:
+    """
+    Apply dynamic exit rules based on signal strength to all trades.
+
+    This is Layer 3: per-trade exit rules chosen dynamically based on entry signal strength.
+
+    Parameters:
+        trade_paths: DataFrame with per-step data and 'signal_strength' column
+                    Columns: ['trade_id','step','direction','pnl','pnl_atr','signal_strength',...]
+        symbol: "BTCUSD" or "XAUUSD"
+
+    Returns:
+        DataFrame with one row per trade:
+            ['trade_id','signal_strength','exit_rule_name','pnl_final','mfe','mae',
+             'mfe_atr','mae_atr','holding_bars','capture_ratio','exit_reason']
+    """
+    from src.backtest.dynamic_exit_rules import get_exit_rule_for_trade
+
+    results = []
+
+    # Group by trade_id
+    for trade_id, group in trade_paths.groupby('trade_id'):
+        # Get signal strength (should be same for all rows in this trade)
+        signal_strength = group['signal_strength'].iloc[0]
+
+        # Get appropriate exit rule for this strength
+        rule = get_exit_rule_for_trade(symbol, signal_strength)
+
+        # Simulate exit on this trade
+        trade_result = simulate_exit_on_single_trade(group, rule)
+
+        # Add signal strength and rule name to result
+        trade_result['signal_strength'] = signal_strength
+        trade_result['exit_rule_name'] = rule.name
+
+        results.append(trade_result)
+
+    return pd.DataFrame(results)
